@@ -251,6 +251,6 @@ class MonitorHandler(BaseHTTPRequestHandler):
         pass
 
 if __name__ == "__main__":
-    server = ThreadingHTTPServer(("127.0.0.1", 8099), MonitorHandler)
-    print("Monitoring server running on http://127.0.0.1:8099")
+    server = ThreadingHTTPServer(("0.0.0.0", 8099), MonitorHandler)
+    print("Monitoring server running on http://0.0.0.0:8099")
     server.serve_forever()
