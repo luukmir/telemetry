@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Node Telemetry</title>
+<style>
+  :root {
+    --bg: #0b0f19;
+    --card: rgba(20, 27, 45, 0.72);
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --purple: #a78bfa;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --red: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: radial-gradient(circle at top right, #1e293b, var(--bg) 60%);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 1.75rem;
+  }
+  .container { max-width: 1240px; margin: 0 auto; }
+  header {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem;
+    margin-bottom: 1.75rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);
+  }
+  .header-left { display: flex; align-items: baseline; gap: 1.25rem; flex-wrap: wrap; }
+  h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: 0.06em; }
+  .sys-meta { font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .status-dot {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 600; color: var(--green);
+  }
+  .status-dot::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+  }
+  .grid-metrics {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem; margin-bottom: 1.5rem;
+  }
+  .grid-tables {
+    display: grid; grid-template-columns: 1.35fr 1fr; gap: 1.25rem;
+  }
+  @media (max-width: 960px) { .grid-tables { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 1.35rem; backdrop-filter: blur(12px);
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; }
+  .card-title { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+  .pill { font-size: 0.75rem; padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,0.06); color: var(--text); font-variant-numeric: tabular-nums; }
+  .metric-val { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .metric-sub { font-size: 0.82rem; color: var(--muted); margin-top: 0.3rem; font-variant-numeric: tabular-nums; }
+  .bar-bg { width: 100%; height: 6px; background: rgba(255,255,255,0.09); border-radius: 99px; margin-top: 0.9rem; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.5s ease, background 0.5s ease; }
+  .sparkline { width: 100%; height: 34px; margin-top: 0.65rem; display: block; overflow: visible; }
+  .net-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 0.25rem; }
+  .net-label { font-size: 0.78rem; color: var(--muted); }
+  .net-num { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding-bottom: 0.65rem; border-bottom: 1px solid var(--border); font-size: 0.76rem; text-transform: uppercase; }
+  td { padding: 0.58rem 0; border-bottom: 1px solid rgba(255,255,255,0.03); font-variant-numeric: tabular-nums; }
+  .badge { padding: 2px 7px; border-radius: 6px; font-size: 0.73rem; background: rgba(16, 185, 129, 0.15); color: var(--green); white-space: nowrap; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="header-left">
+      <h1>NODE TELEMETRY</h1>
+      <div class="sys-meta" id="sys-meta">Uptime: -- | Load: --</div>
+    </div>
+    <div class="status-dot" id="conn-status">LIVE</div>
+  </header>
+
+  <div class="grid-metrics">
+    <!-- CPU + Temp + Sparkline -->
+    <div class="card">
+      <div>
+        <div class="card-header">
+          <span class="card-title">CPU & Thermal</span>
+          <span class="pill" id="temp-pill">--°C</span>
+        </div>
+        <div class="metric-val" id="cpu-val">--%</div>
+        <div class="metric-sub">60s Utilization Trend</div>
+      </div>
+      <div>
+        <svg class="sparkline" viewBox="0 0 200 34" preserveAspectRatio="none">
+          <polyline id="cpu-spark" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="" />
+        </svg>
+        <div class="bar-bg"><div class="bar-fill" id="cpu-bar" style="width: 0%"></div></div>
+      </div>
+    </div>
+
+    <!-- Memory -->
+    <div class="card">
+      <div>
+        <div class="card-header">
+          <span class="card-title">Memory</span>
+        </div>
+        <div class="metric-val" id="mem-val">--%</div>
+        <div class="metric-sub" id="mem-sub">-- / -- GB</div>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" id="mem-bar" style="width: 0%"></div></div>
+    </div>
+
+    <!-- Disk -->
+    <div class="card">
+      <div>
+        <div class="card-header">
+          <span class="card-title">Root Storage (/)</span>
+        </div>
+        <div class="metric-val" id="disk-val">--%</div>
+        <div class="metric-sub" id="disk-sub">-- / -- GB</div>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" id="disk-bar" style="width: 0%"></div></div>
+    </div>
+
+    <!-- Battery & Health -->
+    <div class="card">
+      <div>
+        <div class="card-header">
+          <span class="card-title">Battery & Power</span>
+        </div>
+        <div class="metric-val" id="bat-val">--%</div>
+        <div class="metric-sub" id="bat-sub">Checking...</div>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" id="bat-bar" style="width: 0%"></div></div>
+    </div>
+
+    <!-- Network Throughput + Sparkline -->
+    <div class="card">
+      <div>
+        <div class="card-header">
+          <span class="card-title">Network I/O</span>
+          <span class="pill">Mbps</span>
+        </div>
+        <div class="net-row">
+          <span class="net-label">↓ RX</span>
+          <span class="net-num" style="color: var(--accent)" id="net-rx">0.00</span>
+        </div>
+        <div class="net-row">
+          <span class="net-label">↑ TX</span>
+          <span class="net-num" style="color: var(--purple)" id="net-tx">0.00</span>
+        </div>
+      </div>
+      <svg class="sparkline" viewBox="0 0 200 34" preserveAspectRatio="none">
+        <polyline id="net-rx-spark" fill="none" stroke="var(--accent)" stroke-width="2" points="" />
+        <polyline id="net-tx-spark" fill="none" stroke="var(--purple)" stroke-width="2" points="" />
+      </svg>
+    </div>
+  </div>
+
+  <div class="grid-tables">
+    <div class="card" style="justify-content: flex-start;">
+      <div class="card-header" style="margin-bottom: 1rem;">
+        <span class="card-title">Docker Containers</span>
+        <span class="pill" id="docker-count">0 active</span>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>CPU</th><th>Mem</th><th>Status</th></tr></thead>
+        <tbody id="docker-list"></tbody>
+      </table>
+    </div>
+
+    <div class="card" style="justify-content: flex-start;">
+      <div class="card-header" style="margin-bottom: 1rem;">
+        <span class="card-title">Top Processes (CPU)</span>
+      </div>
+      <table>
+        <thead><tr><th>PID</th><th>Command</th><th>CPU%</th><th>MEM%</th></tr></thead>
+        <tbody id="proc-list"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const evtSource = new EventSource('/stream');
+  const MAX_POINTS = 30;
+  const cpuHistory = [];
+  const rxHistory = [];
+  const txHistory = [];
+
+  const updateSparkline = (elId, data, fixedMax = null) => {
+    const el = document.getElementById(elId);
+    if (data.length < 2) return;
+    const maxVal = fixedMax !== null ? fixedMax : Math.max(...data, 1);
+    const points = data.map((v, i) => {
+      const x = (i / (MAX_POINTS - 1)) * 200;
+      const y = 32 - (Math.min(v, maxVal) / maxVal) * 30;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    el.setAttribute('points', points);
+  };
+
+  const setBar = (id, pct, invert = false) => {
+    const el = document.getElementById(id);
+    el.style.width = Math.min(pct, 100) + '%';
+    if (!invert) {
+      el.style.background = pct > 85 ? 'var(--red)' : pct > 65 ? 'var(--amber)' : 'var(--accent)';
+    } else {
+      el.style.background = pct < 20 ? 'var(--red)' : pct < 40 ? 'var(--amber)' : 'var(--green)';
+    }
+  };
+
+  evtSource.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+
+    // System Meta
+    document.getElementById('sys-meta').textContent = `Uptime: ${d.sys.uptime}  |  Load: ${d.sys.load}`;
+
+    // CPU & Temp
+    document.getElementById('cpu-val').textContent = d.cpu.toFixed(1) + '%';
+    setBar('cpu-bar', d.cpu);
+    cpuHistory.push(d.cpu);
+    if (cpuHistory.length > MAX_POINTS) cpuHistory.shift();
+    updateSparkline('cpu-spark', cpuHistory, 100);
+
+    const tempEl = document.getElementById('temp-pill');
+    if (d.temp !== null) {
+      tempEl.textContent = d.temp.toFixed(1) + '°C';
+      tempEl.style.color = d.temp > 80 ? 'var(--red)' : d.temp > 65 ? 'var(--amber)' : 'var(--green)';
+    } else {
+      tempEl.textContent = 'N/A';
+    }
+
+    // Memory
+    document.getElementById('mem-val').textContent = d.mem.percent.toFixed(1) + '%';
+    document.getElementById('mem-sub').textContent = `${d.mem.used_gb} GB / ${d.mem.total_gb} GB`;
+    setBar('mem-bar', d.mem.percent);
+
+    // Disk
+    document.getElementById('disk-val').textContent = d.disk.percent.toFixed(1) + '%';
+    document.getElementById('disk-sub').textContent = `${d.disk.used_gb} GB / ${d.disk.total_gb} GB`;
+    setBar('disk-bar', d.disk.percent);
+
+    // Battery
+    if (d.battery) {
+      document.getElementById('bat-val').textContent = d.battery.capacity + '%';
+      document.getElementById('bat-sub').textContent = `Status: ${d.battery.status}`;
+      setBar('bat-bar', d.battery.capacity, true);
+    } else {
+      document.getElementById('bat-val').textContent = 'AC';
+      document.getElementById('bat-sub').textContent = 'Direct Power';
+      setBar('bat-bar', 100, true);
+    }
+
+    // Network
+    document.getElementById('net-rx').textContent = d.net.rx_mbps.toFixed(2);
+    document.getElementById('net-tx').textContent = d.net.tx_mbps.toFixed(2);
+    rxHistory.push(d.net.rx_mbps);
+    txHistory.push(d.net.tx_mbps);
+    if (rxHistory.length > MAX_POINTS) rxHistory.shift();
+    if (txHistory.length > MAX_POINTS) txHistory.shift();
+    const netMax = Math.max(...rxHistory, ...txHistory, 1);
+    updateSparkline('net-rx-spark', rxHistory, netMax);
+    updateSparkline('net-tx-spark', txHistory, netMax);
+
+    // Docker
+    document.getElementById('docker-count').textContent = `${d.docker.length} active`;
+    document.getElementById('docker-list').innerHTML = d.docker.length
+      ? d.docker.map(c => `
+          <tr>
+            <td><strong>${c.name}</strong><div style="font-size:0.72rem;color:var(--muted)">${c.image}</div></td>
+            <td class="mono">${c.cpu}</td>
+            <td class="mono">${c.mem}</td>
+            <td><span class="badge">${c.status}</span></td>
+          </tr>`).join('')
+      : '<tr><td colspan="4" style="color:var(--muted)">No active containers</td></tr>';
+
+    // Processes
+    document.getElementById('proc-list').innerHTML = d.processes
+      .map(p => `<tr><td class="mono" style="color:var(--muted)">${p.pid}</td><td>${p.name}</td><td class="mono">${p.cpu}%</td><td class="mono">${p.mem}%</td></tr>`).join('');
+  };
+
+  evtSource.onerror = () => {
+    const st = document.getElementById('conn-status');
+    st.textContent = 'RECONNECTING...';
+    st.style.color = 'var(--amber)';
+  };
+  evtSource.onopen = () => {
+    const st = document.getElementById('conn-status');
+    st.textContent = 'LIVE';
+    st.style.color = 'var(--green)';
+  };
+</script>
+</body>
+</html>
